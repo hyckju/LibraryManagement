@@ -146,9 +146,8 @@ public class LibraryRepository {
      * @see <a href="https://github.com/sumannam/Java/issues/40">Issue #40: SQL Injection 취약점 개발</a>
      */
     public User loadUser(String id, String pw) {
-        //String sql = "SELECT * FROM users WHERE user_id = ? AND password = ?";
-        String sql = "SELECT * FROM users WHERE user_id = '" + id + "' AND password = '" + pw + "'";
-        //System.out.println(sql);
+        // SQL Injection 방지: 입력값을 쿼리에 직접 결합하지 않고 PreparedStatement 자리표시자(?)로 바인딩
+        String sql = "SELECT user_id, password, type FROM users WHERE user_id = ? AND password = ?";
 
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
