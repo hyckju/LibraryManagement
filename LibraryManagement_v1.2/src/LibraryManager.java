@@ -170,22 +170,31 @@ public class LibraryManager {
     }
 
     public void checkServerStatus(String ip) {
+        // OS Command Injection 방지 1) 입력값을 IPv4 형식으로 검증 (화이트리스트)
+        if (ip == null || !ip.matches("^((25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1?\\d?\\d)$")) {
+            System.out.println("[오류] 유효한 IPv4 주소가 아닙니다.");
+            return;
+        }
+
         try {
-            // [수정] cmd.exe /c 를 앞에 붙여서 쉘이 명령어를 해석하게 만듭니다.
-            String command = "cmd.exe /c ping -n 1 " + ip;
+            // OS Command Injection 방지 2) 쉘(cmd.exe /c)을 거치지 않고 인자를 배열로 분리 전달
+            ProcessBuilder pb = new ProcessBuilder("ping", "-n", "1", ip);
+            pb.redirectErrorStream(true);
 
-            System.out.println("[시스템 실행 명령어]: " + command);
+            System.out.println("[시스템 실행 명령어]: ping -n 1 " + ip);
 
-            Process process = Runtime.getRuntime().exec(command);
+            Process process = pb.start();
             // 한글 깨짐 방지를 위해 EUC-KR 유지
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), "EUC-KR"));
-
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println(line);
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), "EUC-KR"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println(line);
+                }
             }
+            process.waitFor();
         } catch (Exception e) {
-            System.out.println("[오류] 진단 중 예외 발생: " + e.getMessage());
+            System.out.println("[오류] 진단 중 예외가 발생했습니다.");
         }
     }
 }
