@@ -48,8 +48,7 @@ public class LibraryManager {
             this.currentUser = user; // 로그인 성공 시 현재 사용자 저장
             return true;
         }
-        return false;
-    }
+        return false;}
 
     /** @return 현재 로그인 중인 {@link User} 객체 */
     public User getCurrentUser() {
@@ -169,6 +168,20 @@ public class LibraryManager {
         return bookMap;
     }
 
+    /**
+     * 입력받은 IP 주소로 네트워크 상태(ping)를 진단합니다.
+     * <p><b>보안 보완:</b> 기존에는 {@code "cmd.exe /c ping -n 1 " + ip} 형태로 쉘에 그대로 전달하여
+     * 명령어 구분자({@code &&}, {@code ;}, {@code |})를 이용한 OS Command Injection에 취약했으나,
+     * 다음과 같이 수정하였습니다. (26.06.01; 양혁주)</p>
+     * <ol>
+     *   <li>입력값을 IPv4 형식 정규식으로 검증(화이트리스트)하여 비정상 입력을 차단</li>
+     *   <li>쉘(cmd.exe /c)을 거치지 않고 {@link ProcessBuilder}로 인자를 분리 전달</li>
+     * </ol>
+     * @param ip 진단할 대상 IPv4 주소
+     *
+     * @see <a href="https://github.com/hyckju/LibraryManagement/issues/8">Issue #8: OS Command Injection 취약점 보완</a>
+     * @see <a href="https://github.com/sumannam/Java/issues/43">Issue #43: OS Command Injection 취약점 개발</a>
+     */
     public void checkServerStatus(String ip) {
         // OS Command Injection 방지 1) 입력값을 IPv4 형식으로 검증 (화이트리스트)
         if (ip == null || !ip.matches("^((25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1?\\d?\\d)$")) {

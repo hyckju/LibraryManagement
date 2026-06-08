@@ -318,19 +318,19 @@ public class LibraryMain {
 
     /**
      * 서버의 네트워크 상태를 진단하기 위한 인터페이스를 제공합니다.
-     * <p><b>보안 실습 주의 (Security Warning):</b></p>
-     * <ul>
-     * <li>이 메소드는 <b>OS Command Injection</b> 취약점을 시연하기 위해 의도적으로 설계되었습니다.</li>
-     * <li>입력값에 대한 검증 없이 OS 명령어를 실행하므로, 세미콜론(;)이나 앰퍼샌드(&)를 이용한 추가 명령어 주입이 가능합니다.</li>
-     * </ul>
-     * * @see LibraryManager#checkServerStatus(String)
+     * <p>사용자로부터 IP 주소를 입력받아 {@link LibraryManager#checkServerStatus(String)}에 전달합니다.</p>
+     * <p><b>보안 보완:</b> 기존에는 입력값을 검증 없이 쉘 명령어로 실행하여 {@code ;}, {@code &} 등을 이용한
+     * OS Command Injection이 가능했으나, {@code checkServerStatus()}에서 IPv4 형식 검증과 ProcessBuilder 적용으로
+     * 주입을 차단하도록 수정하였습니다. (26.06.01; 양혁주)</p>
+     * @see LibraryManager#checkServerStatus(String)
      *
+     * @see <a href="https://github.com/hyckju/LibraryManagement/issues/8">Issue #8: OS Command Injection 취약점 보완</a>
      * @see <a href="https://github.com/sumannam/Java/issues/43">Issue #43: OS Command Injection 취약점 개발</a>
      */
     private static void checkServerUI() {
         System.out.println("\n[서버 네트워크 진단]");
         System.out.print("- 접속을 확인 할 IP 주소를 입력하세요: ");
-        String ip = sc.nextLine(); // 여기서 사용자가 "127.0.0.1 && dir" 등을 입력함
+        String ip = sc.nextLine(); // IPv4 형식만 통과하도록 checkServerStatus()에서 검증됨
 
         // Manager에게 명령어 실행을 맡김
         manager.checkServerStatus(ip);

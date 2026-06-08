@@ -137,12 +137,14 @@ public class LibraryRepository {
 
     /**
      * 사용자 로그인을 위한 정보를 조회합니다.
-     * <p><b>보안 실습 주의:</b> 현재 이 메소드는 SQL Injection 공격에 취약하도록 의도적으로 설계되었습니다.</p>
-     * <p>입력값이 쿼리문에 직접 결합되는 방식의 위험성을 교육하기 위한 용도로만 사용하십시오.</p>
-     * * @param id 사용자 아이디
+     * <p>입력받은 아이디/비밀번호와 일치하는 사용자를 조회하여 반환합니다.</p>
+     * <p><b>보안 보완:</b> 기존에는 입력값을 쿼리 문자열에 직접 결합({@code "... user_id = '" + id + "'"})하여
+     * SQL Injection 인증 우회에 취약했으나, PreparedStatement 자리표시자(?) 바인딩 방식으로 수정하였습니다. (26.06.01; 양혁주)</p>
+     * @param id 사용자 아이디
      * @param pw 사용자 비밀번호
      * @return 인증된 {@link User} 객체 (일치 정보 없을 시 null)
      *
+     * @see <a href="https://github.com/hyckju/LibraryManagement/issues/7">Issue #7: SQL Injection 취약점 보완</a>
      * @see <a href="https://github.com/sumannam/Java/issues/40">Issue #40: SQL Injection 취약점 개발</a>
      */
     public User loadUser(String id, String pw) {

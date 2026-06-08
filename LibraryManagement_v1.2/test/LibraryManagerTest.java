@@ -249,4 +249,129 @@ class LibraryManagerTest {
             System.out.println("[경고] OS Command Injection 공격 성공: 서버 내에서 임의 명령어가 실행되었습니다.");
         }
     }
+
+    // =====================================================================================
+    // 보안 취약점 수정에 대한 회귀 테스트 (Regression Tests)
+    //
+    // 위의 loginSqlInjectionTest / osCommandInjectionTest 는 취약점이 "존재"함을 증명하는
+    // 테스트로(수정 전 통과), 코드가 수정된 현재는 실패한다.
+    // 아래 테스트들은 반대로 취약점이 "수정"되어 공격이 차단됨을 검증하며(공격 실패 시 통과),
+    // 향후 코드 변경으로 취약점이 재발(regression)하면 실패하여 이를 감지한다.
+    //   - SQL Injection 수정       : dd92adf (PreparedStatement 파라미터 바인딩)
+    //   - OS Command Injection 수정 : 88e922e (IPv4 화이트리스트 검증 + ProcessBuilder)
+    // =====================================================================================
+
+    /**
+     * SQL Injection 인증 우회가 차단되었는지 검증하는 회귀 테스트입니다.
+     * <p><b>수정 전:</b> 입력값을 쿼리 문자열에 직접 결합하여 {@code ' OR 1=1 #} 페이로드로 인증이 우회되었습니다.</p>
+     * <p><b>수정 후:</b> PreparedStatement 자리표시자(?) 바인딩으로 페이로드가 단순 문자열로 처리되어
+     * 일치하는 사용자가 없으므로 로그인이 반드시 실패(false)해야 합니다.</p>
+     *
+     * @see LibraryRepository#loadUser(String, String)
+     * @see <a href="https://owasp.org/www-community/attacks/SQL_Injection">OWASP: SQL Injection</a>
+     * @see <a href="https://github.com/sumannam/Java/issues/40">Issue #40: SQL Injection 취약점 개발</a>
+     */
+    @Test
+    @DisplayName("회귀 테스트: SQL Injection 인증 우회가 차단되어야 한다")
+    void loginSqlInjectionBlockedTest() {
+        // Given: 항상 참이 되는 조건/주석/UNION 등 대표적인 인증 우회 페이로드 목록
+        String[] injectionPayloads = {
+                "' OR 1=1 #",
+                "' OR '1'='1",
+                "admin' --",
+                "admin' #",
+                "' OR 1=1 -- ",
+                "' UNION SELECT 'admin','1111','ADMIN' #"
+        };
+
+        // When & Then: 어떤 페이로드로도 인증이 우회되어서는 안 된다 (모두 실패해야 함)
+        for (String payload : injectionPayloads) {
+            assertFalse(
+                    manager.login(payload, "wrong_password"),
+                    "SQL Injection 취약점 재발: 페이로드로 인증이 우회되었습니다 -> " + payload
+            );
+        }
+
+        // 정상 자격증명은 여전히 로그인에 성공해야 한다 (수정으로 인한 기능 회귀 방지)
+        assertTrue(manager.login("admin", "1111"), "정상 계정(admin/1111) 로그인은 성공해야 합니다.");
+    }
+
+    /**
+     * OS Command Injection이 차단되었는지 검증하는 회귀 테스트입니다.
+     * <p><b>수정 전:</b> {@code cmd.exe /c ping ... + 사용자입력} 형태라 {@code &&}, {@code ;}, {@code |} 등의
+     * 구분자로 임의 명령어가 실행되어 {@code vuln.txt} 파일이 생성되었습니다.</p>
+     * <p><b>수정 후:</b> IPv4 형식 화이트리스트 검증을 통과하지 못한 입력은 즉시 차단되고,
+     * 명령은 쉘을 거치지 않는 ProcessBuilder 인자 배열로 전달되므로 임의 파일이 생성되지 않아야 합니다.</p>
+     *
+     * @see LibraryManager#checkServerStatus(String)
+     * @see <a href="https://cwe.mitre.org/data/definitions/78.html">CWE-78: OS Command Injection</a>
+     * @see <a href="https://github.com/sumannam/Java/issues/43">Issue #43: OS Command Injection 취약점 개발</a>
+     */
+    @Test
+    @DisplayName("회귀 테스트: OS Command Injection으로 임의 파일이 생성되지 않아야 한다")
+    void osCommandInjectionBlockedTest() {
+        // Given: Windows 명령어 구분자(&&, &, |, ;, 개행)를 활용한 다양한 주입 페이로드
+        String fileName = "vuln.txt";
+        File injectedFile = new File(fileName);
+        // 사전 정리: 이전 실행 흔적이 남아 있다면 제거하여 테스트 독립성 확보
+        if (injectedFile.exists()) {
+            injectedFile.delete();
+        }
+
+        String[] injectionPayloads = {
+                "127.0.0.1 && echo hacked > " + fileName,
+                "127.0.0.1 & echo hacked > " + fileName,
+                "127.0.0.1 | echo hacked > " + fileName,
+                "127.0.0.1 ; echo hacked > " + fileName,
+                "127.0.0.1\necho hacked > " + fileName
+        };
+
+        try {
+            // When: 각 페이로드로 서버 진단 기능 실행
+            for (String payload : injectionPayloads) {
+                manager.checkServerStatus(payload);
+
+                // Then: 주입된 명령어가 실행되지 않아 파일이 생성되지 않아야 한다
+                assertFalse(
+                        injectedFile.exists(),
+                        "OS Command Injection 취약점 재발: 페이로드로 임의 파일이 생성되었습니다 -> " + payload
+                );
+            }
+        } finally {
+            // 만약 취약점이 재발하여 파일이 생성되었다면 흔적 제거
+            if (injectedFile.exists()) {
+                injectedFile.delete();
+            }
+        }
+    }
+
+    /**
+     * IPv4 형식이 아닌 입력은 화이트리스트 검증에서 거부되어 명령이 실행되지 않아야 함을 검증합니다.
+     * <p>유효한 IPv4(예: {@code 127.0.0.1})만 통과하고, 그 외 형식은 모두 거부되어야 합니다.</p>
+     *
+     * @see LibraryManager#checkServerStatus(String)
+     */
+    @Test
+    @DisplayName("회귀 테스트: IPv4 형식이 아닌 입력은 거부되어야 한다")
+    void checkServerStatusRejectsNonIpv4Test() {
+        // 형식이 잘못된 입력들은 어떤 명령도 실행하지 않고 예외 없이 안전하게 반환되어야 한다
+        String[] invalidInputs = {
+                null,
+                "",
+                "localhost",
+                "127.0.0.1 ",          // 후행 공백
+                "256.256.256.256",     // 범위 초과
+                "127.0.0",             // 옥텟 부족
+                "127.0.0.1.1",         // 옥텟 초과
+                "0x7f.0.0.1",          // 16진 표기
+                "127.0.0.1 && dir"     // 구분자 결합
+        };
+
+        for (String input : invalidInputs) {
+            assertDoesNotThrow(
+                    () -> manager.checkServerStatus(input),
+                    "잘못된 입력은 예외 없이 거부되어야 합니다 -> " + input
+            );
+        }
+    }
 }
